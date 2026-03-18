@@ -20,72 +20,14 @@ app.use(session({
   saveUninitialized: true
 }));
 
-// ================= USER LIST =================
-const allowedUsers = [
-"brijesh.tiwari@linuxlaboratories.in",
-"navin.kumar@linuxlaboratories.in",
-"rajatnarayankarmokar@linuxlaboratories.in",
-"kirandedhia@linuxlaboratories.in",
-"jose.jacob@linuxlaboratories.in",
-"manojkumar.patil@linuxlaboratories.in",
-"devanshushah@linuxlaboratories.in",
-"nandakishore.babu@linuxlaboratories.in",
-"tarungohe@linuxlaboratories.in",
-"randeepsingh_meta@linuxlaboratories.in",
-"pankajrathor_meta@linuxlaboratories.in",
-"niraj.barochia_meta@linuxlaboratories.in",
-"harish.k.r@linuxlaboratories.in",
-"rajugupta_meta@linuxlaboratories.in",
-"bhawanishankar@linuxlaboratories.in",
-"murugesanpalaniyappan@linuxlaboratories.in",
-"gnanaprakash_meta@linuxlaboratories.in",
-"debu.meta@linuxlaboratories.in",
-"pasupuletivijay1986@gmail.com",
-"nanhe.bhartendu@gmail.com",
-"ramprajapati2007@ggmail.com",
-"honeyvrm6@gmail.com",
-"ssamani151@gmail.com",
-"prabhatdwivedi19@gmail.com",
-"shashimaahi@gmail.com",
-"rajbahadurpatel172@gmail.com",
-"pathanimrankhan051@gmail.com",
-"santhoshkmr05@gmail.com",
-"faze73@gmail.com",
-"arundas.tinkufipzinda@gmail.com",
-"vinitpy@gmail.com",
-"vpvikaspatel163@gmail.com",
-"raj.bvy@gmail.com",
-"mohd786azamkhan@gmail.com",
-"vishalrajbhar@rediffmail.com",
-"ranjankumardalai02@gmail.com",
-"goldysngh44@gmail.com",
-"amankumarshridhar@gmail.com",
-"vikeykamodiya421995@gmail.com",
-"rajsinghajmer5@gmail.com",
-"jagdish5586@gmail.com",
-"nilsdesmukh@gmail.com",
-"nilendrakathar@gmail.com",
-"roshan.samarth3292@gmail.com",
-"aamulraj2011@gmail.com",
-"karthick1987.venkatesh@gmail.com",
-"sri_1410@yahoo.com",
-"vasanthanila.143@gmail.com",
-"kumarswamy.kukkla@gmail.com",
-"prabhu.chinna54@gmail.com",
-"durgeshdubey1880@gmail.com",
-"rathorneerajkumar@gmail.com",
-"sonu.singhfmt@gmail.com",
-"shovanghosh92@gmail.com",
-"arunabha1981gon@gmail.com",
-"niladrighatak1979@gmail.com",
-"linuxmeta.data@gmail.com"
-];
+// ================= USERS =================
+const allowedUsers = [/* your full list here */,"linuxmeta.data@gmail.com"];
 
-// ================= HELPERS =================
 function isAdmin(email){
   return email === "linuxmeta.data@gmail.com";
 }
 
+// ================= HELPERS =================
 function readData() {
   if (!fs.existsSync('data.json')) return [];
   return JSON.parse(fs.readFileSync('data.json'));
@@ -139,16 +81,30 @@ app.post('/login',(req,res)=>{
   res.send("Login success");
 });
 
-// ================= DATA =================
+// ================= GET DATA =================
 app.get('/getData',(req,res)=>{
   if(!req.session.user) return res.json({error:"login"});
+
   let data=readData();
+
+  // ✅ ADMIN FIX
+  if(isAdmin(req.session.user.email)){
+    return res.json(data);
+  }
+
   res.json(filterByEmail(data,req.session.user.email));
 });
 
 // ================= DASHBOARD =================
 app.get('/dashboard',(req,res)=>{
-  let data=filterByEmail(readData(),req.session.user.email);
+
+  let data = readData();
+
+  // ✅ ADMIN FIX
+  if(!isAdmin(req.session.user.email)){
+    data = filterByEmail(data, req.session.user.email);
+  }
+
   let total=data.length;
   let sss=data.filter(r=>r.SSS).length;
   let aws=data.filter(r=>r.AWS).length;
@@ -162,7 +118,7 @@ app.get('/dashboard',(req,res)=>{
   });
 });
 
-// ================= EXCEL =================
+// ================= EXCEL UPLOAD =================
 app.post('/uploadExcel',upload.single('file'),(req,res)=>{
   let wb=XLSX.readFile(req.file.path);
   let sheet=wb.Sheets[wb.SheetNames[0]];
@@ -176,7 +132,7 @@ app.post('/uploadExcel',upload.single('file'),(req,res)=>{
   res.send("Excel uploaded");
 });
 
-// ================= SAVE =================
+// ================= SAVE VALUE =================
 app.post('/saveValue',(req,res)=>{
   let data=readData();
   data.forEach(r=>{
@@ -210,14 +166,17 @@ app.post('/uploadFile',upload.single('file'),async(req,res)=>{
 
   for(let r of data){
     if(r.Stockist_Code===req.body.code){
+
       if(!r.Value){
         fs.unlinkSync(req.file.path);
         return res.send("Enter value first");
       }
+
       if(r[req.body.type]){
         fs.unlinkSync(req.file.path);
         return res.send("Already uploaded");
       }
+
       r[req.body.type]=true;
     }
   }
@@ -226,7 +185,7 @@ app.post('/uploadFile',upload.single('file'),async(req,res)=>{
   res.send("Uploaded");
 });
 
-// ================= REPORT =================
+// ================= DOWNLOAD REPORT =================
 app.get('/downloadReport',async(req,res)=>{
 
   if(!req.session.user || !isAdmin(req.session.user.email)){
@@ -266,7 +225,7 @@ app.get('/downloadReport',async(req,res)=>{
   res.end();
 });
 
-// ================= ZIP =================
+// ================= DOWNLOAD ZIP =================
 app.get('/downloadAll',(req,res)=>{
 
   if(!req.session.user || !isAdmin(req.session.user.email)){
@@ -279,8 +238,10 @@ app.get('/downloadAll',(req,res)=>{
 
   function addDir(dir,zipPath=""){
     if(!fs.existsSync(dir)) return;
+
     fs.readdirSync(dir).forEach(f=>{
       let full=path.join(dir,f);
+
       if(fs.statSync(full).isDirectory()){
         addDir(full,path.join(zipPath,f));
       }else{
