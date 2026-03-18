@@ -1,3 +1,4 @@
+// ================= IMPORTS =================
 const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
@@ -5,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const session = require('express-session');
+const ExcelJS = require('exceljs');
+const archiver = require('archiver');
 
 const app = express();
 
@@ -17,242 +20,281 @@ app.use(session({
   saveUninitialized: true
 }));
 
-/* ---------- SAFE FILE READ ---------- */
-function readData() {
-  if (!fs.existsSync('data.json')) return [];
-  const txt = fs.readFileSync('data.json');
-  if (!txt.toString().trim()) return [];
-  return JSON.parse(txt);
+// ================= USER LIST =================
+const allowedUsers = [
+"brijesh.tiwari@linuxlaboratories.in",
+"navin.kumar@linuxlaboratories.in",
+"rajatnarayankarmokar@linuxlaboratories.in",
+"kirandedhia@linuxlaboratories.in",
+"jose.jacob@linuxlaboratories.in",
+"manojkumar.patil@linuxlaboratories.in",
+"devanshushah@linuxlaboratories.in",
+"nandakishore.babu@linuxlaboratories.in",
+"tarungohe@linuxlaboratories.in",
+"randeepsingh_meta@linuxlaboratories.in",
+"pankajrathor_meta@linuxlaboratories.in",
+"niraj.barochia_meta@linuxlaboratories.in",
+"harish.k.r@linuxlaboratories.in",
+"rajugupta_meta@linuxlaboratories.in",
+"bhawanishankar@linuxlaboratories.in",
+"murugesanpalaniyappan@linuxlaboratories.in",
+"gnanaprakash_meta@linuxlaboratories.in",
+"debu.meta@linuxlaboratories.in",
+"pasupuletivijay1986@gmail.com",
+"nanhe.bhartendu@gmail.com",
+"ramprajapati2007@ggmail.com",
+"honeyvrm6@gmail.com",
+"ssamani151@gmail.com",
+"prabhatdwivedi19@gmail.com",
+"shashimaahi@gmail.com",
+"rajbahadurpatel172@gmail.com",
+"pathanimrankhan051@gmail.com",
+"santhoshkmr05@gmail.com",
+"faze73@gmail.com",
+"arundas.tinkufipzinda@gmail.com",
+"vinitpy@gmail.com",
+"vpvikaspatel163@gmail.com",
+"raj.bvy@gmail.com",
+"mohd786azamkhan@gmail.com",
+"vishalrajbhar@rediffmail.com",
+"ranjankumardalai02@gmail.com",
+"goldysngh44@gmail.com",
+"amankumarshridhar@gmail.com",
+"vikeykamodiya421995@gmail.com",
+"rajsinghajmer5@gmail.com",
+"jagdish5586@gmail.com",
+"nilsdesmukh@gmail.com",
+"nilendrakathar@gmail.com",
+"roshan.samarth3292@gmail.com",
+"aamulraj2011@gmail.com",
+"karthick1987.venkatesh@gmail.com",
+"sri_1410@yahoo.com",
+"vasanthanila.143@gmail.com",
+"kumarswamy.kukkla@gmail.com",
+"prabhu.chinna54@gmail.com",
+"durgeshdubey1880@gmail.com",
+"rathorneerajkumar@gmail.com",
+"sonu.singhfmt@gmail.com",
+"shovanghosh92@gmail.com",
+"arunabha1981gon@gmail.com",
+"niladrighatak1979@gmail.com",
+"linuxmeta.data@gmail.com"
+];
+
+// ================= HELPERS =================
+function isAdmin(email){
+  return email === "linuxmeta.data@gmail.com";
 }
 
-/* ---------- STORAGE ---------- */
+function readData() {
+  if (!fs.existsSync('data.json')) return [];
+  return JSON.parse(fs.readFileSync('data.json'));
+}
+
+function filterByEmail(data, email){
+  email = email.toLowerCase();
+
+  return data.filter(row =>
+    (row.BH_Email || "").toLowerCase() === email ||
+    (row.SM_Email || "").toLowerCase() === email ||
+    (row.ZBM_Email || "").toLowerCase() === email ||
+    (row.RBM_Email || "").toLowerCase() === email ||
+    (row.ABM_Email || "").toLowerCase() === email
+  );
+}
+
+// ================= STORAGE =================
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-
-    // Excel upload → temporary
-    if (!req.body.type) {
-      const dir = path.join(__dirname, 'uploads', 'temp');
-      fs.mkdirSync(dir, { recursive: true });
-      return cb(null, dir);
+  destination: (req,file,cb)=>{
+    if(!req.body.type){
+      let dir = "uploads/temp";
+      fs.mkdirSync(dir,{recursive:true});
+      return cb(null,dir);
     }
-
-    const state = req.body.state || "UNKNOWN";
-    const type = req.body.type;
-
-    const dir = path.join(__dirname, 'uploads', state, type);
-    fs.mkdirSync(dir, { recursive: true });
-
-    cb(null, dir);
+    let dir = `uploads/${req.body.state}/${req.body.type}`;
+    fs.mkdirSync(dir,{recursive:true});
+    cb(null,dir);
   },
-
-  filename: function (req, file, cb) {
-
-    // Excel upload
-    if (!req.body.type) {
-      return cb(null, "excel_" + Date.now() + path.extname(file.originalname));
+  filename:(req,file,cb)=>{
+    if(!req.body.type){
+      return cb(null,"excel_"+Date.now()+path.extname(file.originalname));
     }
-
-    const code = req.body.code || "NO_CODE";
-    const name = (req.body.name || "NO_NAME").replace(/[^a-zA-Z0-9]/g, "_");
-    const type = req.body.type;
-    const ext = path.extname(file.originalname);
-
-    cb(null, `${code}_${name}_${type}${ext}`);
+    let name=(req.body.name||"").replace(/[^a-zA-Z0-9]/g,"_");
+    cb(null,`${req.body.code}_${name}_${req.body.type}${path.extname(file.originalname)}`);
   }
 });
+const upload = multer({storage});
 
-const upload = multer({ storage });
+const allowedTypes=['.pdf','.xlsx','.xls','.txt','.html','.doc','.docx'];
 
-const allowedTypes = ['.pdf','.xlsx','.xls','.txt','.html','.doc','.docx'];
+// ================= LOGIN =================
+app.post('/login',(req,res)=>{
+  let email=(req.body.email||"").toLowerCase();
 
-/* ---------- LOGIN ---------- */
-app.post('/login', (req, res) => {
-  const { email } = req.body;
+  if(!allowedUsers.includes(email)){
+    return res.send("Access Denied");
+  }
 
-  const users = JSON.parse(fs.readFileSync('users.json'));
-  const user = users.find(u => u.email === email);
-
-  if (!user) return res.send("Invalid user");
-
-  req.session.user = user;
+  req.session.user={email};
   res.send("Login success");
 });
 
-app.get('/logout', (req, res) => {
-  req.session.destroy();
-  res.send("Logged out");
+// ================= DATA =================
+app.get('/getData',(req,res)=>{
+  if(!req.session.user) return res.json({error:"login"});
+  let data=readData();
+  res.json(filterByEmail(data,req.session.user.email));
 });
 
-/* ---------- EXCEL UPLOAD ---------- */
-app.post('/uploadExcel', upload.single('file'), (req, res) => {
-
-  const workbook = XLSX.readFile(req.file.path);
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  let data = XLSX.utils.sheet_to_json(sheet);
-
-  data = data.map(row => ({
-    ...row,
-    Value: "",
-    SSS: false,
-    AWS: false
-  }));
-
-  fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
-  fs.unlinkSync(req.file.path);
-
-  res.send("Excel uploaded successfully");
-});
-
-/* ---------- GET DATA ---------- */
-app.get('/getData', (req, res) => {
-
-  if (!req.session.user) return res.json({ error: "login" });
-
-  let data = readData();
-
-  if (req.session.user.role !== "admin") {
-    data = data.filter(r => r.BH_Email === req.session.user.email);
-  }
-
-  res.json(data);
-});
-
-/* ---------- SAVE VALUE ---------- */
-app.post('/saveValue', (req, res) => {
-
-  const { code, value } = req.body;
-  let data = readData();
-
-  data.forEach(row => {
-    if (row.Stockist_Code === code) {
-      row.Value = value;
-    }
-  });
-
-  fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
-  res.send("Saved");
-});
-
-/* ---------- FILE UPLOAD ---------- */
-app.post('/uploadFile', upload.single('file'), async (req, res) => {
-
-  const file = req.file;
-  const ext = path.extname(file.originalname).toLowerCase();
-
-  if (!allowedTypes.includes(ext)) {
-    fs.unlinkSync(file.path);
-    return res.send("Invalid file type");
-  }
-
-  // PDF validation
-  if (ext === '.pdf') {
-    try {
-      const data = await pdfParse(fs.readFileSync(file.path));
-      if (!data.text) throw "Invalid";
-    } catch {
-      fs.unlinkSync(file.path);
-      return res.send("Invalid PDF");
-    }
-  }
-
-  const { code, type } = req.body;
-  let data = readData();
-
-  for (let row of data) {
-    if (row.Stockist_Code === code) {
-
-      if (!row.Value) {
-        fs.unlinkSync(file.path);
-        return res.send("Enter value first");
-      }
-
-      if (row[type] === true) {
-        fs.unlinkSync(file.path);
-        return res.send("Already uploaded");
-      }
-
-      row[type] = true;
-    }
-  }
-
-  fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
-  res.send("Uploaded successfully");
-});
-
-/* ---------- DASHBOARD ---------- */
-app.get('/dashboard', (req, res) => {
-
-  let data = readData();
-
-  let total = data.length;
-  let sss = data.filter(r => r.SSS).length;
-  let aws = data.filter(r => r.AWS).length;
+// ================= DASHBOARD =================
+app.get('/dashboard',(req,res)=>{
+  let data=filterByEmail(readData(),req.session.user.email);
+  let total=data.length;
+  let sss=data.filter(r=>r.SSS).length;
+  let aws=data.filter(r=>r.AWS).length;
 
   res.json({
     total,
     sss,
     aws,
-    pendingSSS: total - sss,
-    pendingAWS: total - aws
+    pendingSSS: total-sss,
+    pendingAWS: total-aws
   });
 });
-const ExcelJS = require('exceljs');
 
-/* ---------- DOWNLOAD REPORT ---------- */
-app.get('/downloadReport', async (req, res) => {
+// ================= EXCEL =================
+app.post('/uploadExcel',upload.single('file'),(req,res)=>{
+  let wb=XLSX.readFile(req.file.path);
+  let sheet=wb.Sheets[wb.SheetNames[0]];
+  let data=XLSX.utils.sheet_to_json(sheet);
 
-  let data = readData();
+  data=data.map(r=>({...r,Value:"",SSS:false,AWS:false}));
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Report');
+  fs.writeFileSync('data.json',JSON.stringify(data,null,2));
+  fs.unlinkSync(req.file.path);
 
-  sheet.columns = [
-    { header: 'Code', key: 'code' },
-    { header: 'Name', key: 'name' },
-    { header: 'Value', key: 'value' },
-    { header: 'SSS', key: 'sss' },
-    { header: 'AWS', key: 'aws' }
-  ];
-
-  data.forEach(r => {
-    sheet.addRow({
-      code: r.Stockist_Code,
-      name: r.Stockist_Name,
-      value: r.Value,
-      sss: r.SSS ? "Done" : "Pending",
-      aws: r.AWS ? "Done" : "Pending"
-    });
-  });
-
-  res.setHeader(
-    'Content-Type',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  );
-
-  res.setHeader(
-    'Content-Disposition',
-    'attachment; filename=report.xlsx'
-  );
-
-  await workbook.xlsx.write(res);
-  res.end();
+  res.send("Excel uploaded");
 });
-/* ---------- FILE DOWNLOAD ---------- */
-app.get('/downloadFile', (req, res) => {
 
-  if (!req.session.user || req.session.user.role !== "admin") {
-    return res.send("Not allowed");
+// ================= SAVE =================
+app.post('/saveValue',(req,res)=>{
+  let data=readData();
+  data.forEach(r=>{
+    if(r.Stockist_Code===req.body.code) r.Value=req.body.value;
+  });
+  fs.writeFileSync('data.json',JSON.stringify(data,null,2));
+  res.send("Saved");
+});
+
+// ================= FILE UPLOAD =================
+app.post('/uploadFile',upload.single('file'),async(req,res)=>{
+
+  let ext=path.extname(req.file.originalname).toLowerCase();
+
+  if(!allowedTypes.includes(ext)){
+    fs.unlinkSync(req.file.path);
+    return res.send("Invalid file");
   }
 
-  const filePath = req.query.path;
+  if(ext==='.pdf'){
+    try{
+      let d=await pdfParse(fs.readFileSync(req.file.path));
+      if(!d.text) throw "";
+    }catch{
+      fs.unlinkSync(req.file.path);
+      return res.send("Invalid PDF");
+    }
+  }
 
-  res.download(filePath);
+  let data=readData();
+
+  for(let r of data){
+    if(r.Stockist_Code===req.body.code){
+      if(!r.Value){
+        fs.unlinkSync(req.file.path);
+        return res.send("Enter value first");
+      }
+      if(r[req.body.type]){
+        fs.unlinkSync(req.file.path);
+        return res.send("Already uploaded");
+      }
+      r[req.body.type]=true;
+    }
+  }
+
+  fs.writeFileSync('data.json',JSON.stringify(data,null,2));
+  res.send("Uploaded");
 });
 
-/* ---------- START ---------- */
-const PORT = process.env.PORT || 3000;
+// ================= REPORT =================
+app.get('/downloadReport',async(req,res)=>{
 
-app.listen(PORT, () => {
-  console.log("Server running");
+  if(!req.session.user || !isAdmin(req.session.user.email)){
+    return res.send("Access denied");
+  }
+
+  let data=readData();
+  let wb=new ExcelJS.Workbook();
+  let sheet=wb.addWorksheet("Report");
+
+  let headers=Object.keys(data[0]||{});
+  sheet.columns=headers.map(h=>({header:h,key:h,width:20}));
+
+  data.forEach(r=>{
+    let row={...r};
+    row.SSS=r.SSS?"Done":"Pending";
+    row.AWS=r.AWS?"Done":"Pending";
+
+    let added=sheet.addRow(row);
+
+    let sssIndex=headers.indexOf("SSS")+1;
+    let awsIndex=headers.indexOf("AWS")+1;
+
+    added.getCell(sssIndex).fill={
+      type:'pattern',pattern:'solid',
+      fgColor:{argb:row.SSS==="Done"?'FF00FF00':'FFFF0000'}
+    };
+
+    added.getCell(awsIndex).fill={
+      type:'pattern',pattern:'solid',
+      fgColor:{argb:row.AWS==="Done"?'FF00FF00':'FFFF0000'}
+    };
+  });
+
+  res.setHeader('Content-Disposition','attachment; filename=Report.xlsx');
+  await wb.xlsx.write(res);
+  res.end();
 });
 
+// ================= ZIP =================
+app.get('/downloadAll',(req,res)=>{
+
+  if(!req.session.user || !isAdmin(req.session.user.email)){
+    return res.send("Access denied");
+  }
+
+  res.attachment("Files.zip");
+  let archive=archiver('zip');
+  archive.pipe(res);
+
+  function addDir(dir,zipPath=""){
+    if(!fs.existsSync(dir)) return;
+    fs.readdirSync(dir).forEach(f=>{
+      let full=path.join(dir,f);
+      if(fs.statSync(full).isDirectory()){
+        addDir(full,path.join(zipPath,f));
+      }else{
+        archive.file(full,{name:path.join(zipPath,f)});
+      }
+    });
+  }
+
+  addDir("uploads");
+  archive.finalize();
+});
+
+// ================= START =================
+app.get('/',(req,res)=>res.redirect('/login.html'));
+
+const PORT=process.env.PORT||3000;
+app.listen(PORT,()=>console.log("Running"));
