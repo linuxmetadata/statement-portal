@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Statement Portal</title>
+
+<style>
+body {
+  font-family: Arial;
+  padding: 20px;
+  background: #f5f5f5;
+}
+
+h2 {
+  margin-bottom: 10px;
+}
+
+button {
+  padding: 6px 12px;
+  margin: 5px;
+  cursor: pointer;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background: white;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background: #007bff;
+  color: white;
+}
+
+#dashboard {
+  background: #fff;
+  padding: 10px;
+  border: 1px solid #ccc;
+  margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Statement Portal</h2>
+
+<button onclick="logout()">Logout</button>
+
+<br><br>
+
+<input type="file" id="excel">
+<button onclick="uploadExcel()">Upload Excel</button>
+
+<h3>Dashboard</h3>
+<div id="dashboard">Loading...</div>
+
+<button onclick="downloadReport()">Download Report</button>
+
+<table id="table"></table>
+
+<script>
+
+// ---------------- LOAD DATA ----------------
+async function load() {
+
+  let res = await fetch('/getData');
+  let data = await res.json();
+
+  // Login protection
+  if (data.error) {
+    window.location = "login.html";
+    return;
+  }
+
+  let html = `
+  <tr>
+    <th>BM HQ</th>
+    <th>Code</th>
+    <th>Name</th>
+    <th>Value</th>
+    <th>SSS</th>
+    <th>AWS</th>
+  </tr>`;
+
+  data.forEach(r => {
+
+    html += `
+    <tr>
+      <td>${r.BM_HQ || ""}</td>
+      <td>${r.Stockist_Code}</td>
+      <td>${r.Stockist_Name}</td>
+
+      <td>
+        <input value="${r.Value || ""}" 
+        onchange="save('${r.Stockist_Code}', this.value)">
+      </td>
+
+      <td>
+        ${r.SSS ? 
+          `<b style="color:green;">Uploaded</b>` :
+          `<input type="file" 
+            onchange="upload(this,'${r.Stockist_Code}','SSS','${r.STATE}','${r.Stockist_Name}')">`
+        }
+      </td>
+
+      <td>
+        ${r.AWS ? 
+          `<b style="color:green;">Uploaded</b>` :
+          `<input type="file" 
+            onchange="upload(this,'${r.Stockist_Code}','AWS','${r.STATE}','${r.Stockist_Name}')">`
+        }
+      </td>
+    </tr>`;
+  });
+
+  document.getElementById("table").innerHTML = html;
+
+  // Load dashboard also
+  loadDashboard();
+}
+
+// ---------------- DASHBOARD ----------------
+async function loadDashboard() {
+
+  let res = await fetch('/dashboard');
+  let d = await res.json();
+
+  document.getElementById("dashboard").innerHTML = `
+    <b>Total:</b> ${d.total} |
+    <b>SSS Uploaded:</b> ${d.sss} |
+    <b>AWS Uploaded:</b> ${d.aws} |
+    <b>Pending SSS:</b> ${d.pendingSSS} |
+    <b>Pending AWS:</b> ${d.pendingAWS}
+  `;
+}
+
+// ---------------- UPLOAD EXCEL ----------------
+async function uploadExcel() {
+
+  let file = document.getElementById("excel").files[0];
+
+  if (!file) {
+    alert("Please select Excel file");
+    return;
+  }
+
+  let f = new FormData();
+  f.append("file", file);
+
+  await fetch('/uploadExcel', {
+    method: 'POST',
+    body: f
+  });
+
+  alert("Excel uploaded successfully");
+
+  load();
+}
+
+// ---------------- SAVE VALUE ----------------
+async function save(code, value) {
+
+  await fetch('/saveValue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, value })
+  });
+}
+
+// ---------------- FILE UPLOAD ----------------
+async function upload(input, code, type, state, name) {
+
+  let file = input.files[0];
+
+  if (!file) return;
+
+  let f = new FormData();
+  f.append("file", file);
+  f.append("code", code);
+  f.append("type", type);
+  f.append("state", state);
+  f.append("name", name);
+
+  let res = await fetch('/uploadFile', {
+    method: 'POST',
+    body: f
+  });
+
+  let msg = await res.text();
+  alert(msg);
+
+  load();
+}
+
+// ---------------- DOWNLOAD REPORT ----------------
+function downloadReport() {
+  window.open('/downloadReport');
+}
+
+// ---------------- LOGOUT ----------------
+async function logout() {
+  await fetch('/logout');
+  window.location = "login.html";
+}
+
+// INITIAL LOAD
+loadDashboard();
+
+</script>
+
+</body>
+</html>

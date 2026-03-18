@@ -1,0 +1,23 @@
+<h2>Login</h2>
+<input id="email" placeholder="Enter Email">
+<button onclick="login()">Login</button>
+
+<script>
+async function login() {
+  let email = document.getElementById("email").value;
+
+  let res = await fetch('/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email})
+  });
+
+  let msg = await res.text();
+
+  if(msg==="Login success"){
+    location="stockist.html";
+  } else {
+    alert(msg);
+  }
+}
+</script>
