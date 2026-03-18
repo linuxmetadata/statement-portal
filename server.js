@@ -34,14 +34,15 @@ function readData() {
 }
 
 function filterByEmail(data, email){
-  email = email.toLowerCase();
+
+  email = email.toLowerCase().trim();
 
   return data.filter(row =>
-    (row.BH_Email || "").toLowerCase() === email ||
-    (row.SM_Email || "").toLowerCase() === email ||
-    (row.ZBM_Email || "").toLowerCase() === email ||
-    (row.RBM_Email || "").toLowerCase() === email ||
-    (row.ABM_Email || "").toLowerCase() === email
+    (row.BH_Email || "").toLowerCase().trim() === email ||
+    (row.SM_Email || "").toLowerCase().trim() === email ||
+    (row.ZBM_Email || "").toLowerCase().trim() === email ||
+    (row.RBM_Email || "").toLowerCase().trim() === email ||
+    (row.ABM_Email || "").toLowerCase().trim() === email
   );
 }
 

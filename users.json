@@ -1,4 +1,15 @@
-[
-  { "email": "linuxmeta.data@gmail.com", "role": "admin" },
-  { "email": "user1@company.com", "role": "user" }
-]
+app.post('/login',(req,res)=>{
+
+  let email = (req.body.email || "").toLowerCase().trim();
+
+  // normalize allowed users also
+  let normalizedUsers = allowedUsers.map(e => e.toLowerCase().trim());
+
+  if(!normalizedUsers.includes(email)){
+    return res.send("Access Denied");
+  }
+
+  req.session.user = { email };
+
+  res.send("Login success");
+});
